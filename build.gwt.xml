@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<project name="build.gwt" default="compile" xmlns:ivy="antlib:org.apache.ivy.ant" 
+    xmlns:groovy="antlib:org.codehaus.groovy" xmlns:contrib="antlib:net.sf.antcontrib">
+
+	<!-- =========================================== -->
+	<!-- = Properties                              = -->
+	<!-- =========================================== -->
+	<property environment="env" /> 
+    
+	<property name="src" value="src" />
+	<property name="war" value="war" />
+	<property name="build" value="build" />
+    <property name="build.classes"     value="${build}/classes" />
+    <property name="build.classes.api" value="${build}/classes.api" />
+	<property name="build.gwt"         value="${build}/gwt" />
+	<property name="build.gen"         value="${build}/gen" />
+	<property name="build.extra"       value="${build}/extra" />
+	<property name="build.war"         value="${build}/war" />
+	<property name="build.artifacts"   value="${build}/artifacts" />
+	
+	<!-- =========================================== -->
+	<!-- = Clean                                   = -->
+	<!-- =========================================== -->
+	<target name="clean" description="Removes all build files">
+		<delete dir="${build}" />
+	</target>
+
+	<!-- =========================================== -->
+	<!-- = Prepare                                 = -->
+	<!-- =========================================== -->
+	<target name="prepare">
+		<mkdir dir="${build}" />
+	    <mkdir dir="${build.classes}" />
+        <mkdir dir="${build.classes.api}" />
+		<mkdir dir="${build.gwt}" />
+		<mkdir dir="${build.gen}" />
+		<mkdir dir="${build.extra}" />
+		<mkdir dir="${build.war}" />
+		<mkdir dir="${build.artifacts}" />
+	</target>
+
+	
+	<!-- =========================================== -->
+	<!-- = Init                                    = -->
+	<!-- =========================================== -->
+	<target name="init" depends="init-builds, init-production, init-development, init-local, init-remote" />
+	
+	
+	<!-- =========================================== -->
+	<!-- = Init Build Properties                   = -->
+	<!-- =========================================== -->
+	<target name="init-builds">
+		<fail message="Could not find project.name property. Can't continue before you set it.">
+            <condition>
+				<not>
+					<isset property="project.name"/>
+				</not>
+            </condition>
+		</fail>
+	
+		<condition property="production.build">
+			<or>
+				<equals arg1="${build.gwt.options.isproduction}" arg2="true" />
+				<equals arg1="${env.BUILD_OPTS}" arg2="remote" />
+			</or>
+	    </condition>         
+		<condition property="development.build">
+			<not>
+				<isset property="production.build"/>
+			</not>
+		</condition>
+		
+		<condition property="remote.build">
+			<equals arg1="${env.BUILD_OPTS}" arg2="remote" />
+	    </condition>    
+		<condition property="local.build">
+			<not>
+				<isset property="remote.build"/>
+			</not>
+		</condition>
+
+		<tstamp>
+			<format property="publish.date" timezone="UTC" pattern="yyyyMMddHHmmss"/>
+		</tstamp>				
+	</target>
+
+	
+	<!-- =========================================== -->
+	<!-- = Init for production builds              = -->
+	<!-- =========================================== -->
+	<target name="init-production" if="production.build">
+        <echo message="Using production settings"/>
+		<property name="gwt.logLevel"       value="TRACE"/>    
+		<property name="gwt.style"          value="OBFUSCATED"/>    
+		<property name="gwt.additionalArgs" value=""/>    
+		<property name="gwt.localWorkers"   value="4"/>        
+	</target>
+	
+	<!-- =========================================== -->
+	<!-- = Init for development builds             = -->
+	<!-- =========================================== -->
+	<target name="init-development" if="development.build">
+        <echo message="Using development settings"/>
+		<property name="gwt.logLevel"       value="TRACE"/>    
+		<property name="gwt.style"          value="PRETTY"/>    
+		<property name="gwt.localWorkers"   value="2"/>    		
+		<property name="gwt.additionalArgs" value="-draftCompile"/>      
+	</target>
+	
+	<!-- =========================================== -->
+	<!-- = Init for integration builds             = -->
+	<!-- =========================================== -->
+	<target name="init-remote" if="remote.build">
+        <echo message="Using remote ivy settings"/>
+	</target>
+	
+	<!-- =========================================== -->
+	<!-- = Init for local builds                   = -->
+	<!-- =========================================== -->
+	<target name="init-local" if="local.build">
+        <echo message="Using local ivy settings"/>
+	</target>
+	
+		
+	<!-- =========================================== -->
+	<!-- = Compile                                 = -->
+	<!-- =========================================== -->
+	<target name="compile" depends="init, prepare" description="Compiles all GWT EntryPoints and Java APIs">
+        <echo message="Compiling API"/>
+        <javac srcdir="${src}" destdir="${build.classes.api}" source="1.5" target="1.5">
+	       <classpath>
+                <path refid="default.classpath" />
+            </classpath>
+	        <exclude name="**/client/domain/**" />
+        </javac>
+
+        <echo message="Compiling Core"/>
+        <javac srcdir="${src}" destdir="${build.classes}" debug="on" debuglevel="lines,vars,source" source="1.5" target="1.5">
+	       <classpath>
+                <pathelement path="${build.classes.api}" />
+                <path refid="default.classpath" />
+            </classpath>
+        </javac>
+
+        <echo message="Searching Entrypoints"/>
+        <groovy:groovy>
+            def modules      = []
+			if ("${properties['build.gwt.options.isheadless']}".contains("true")) {
+	            println "This is a headless GWT module. Won't invoke GWT compiler...";          		        	   
+        	} else {
+            	new File("${properties['basedir']}\\src").eachDirRecurse() { dir ->  
+                	 dir.eachFileMatch(~/.*?.gwt.xml/) { file ->
+                    	def module = new XmlSlurper().parse(file)
+						if (module."entry-point".@class != "") {
+			            	foundModule = file.path.replace("${properties['basedir']}\\src\\", "").replace("\\", ".").replace(".gwt.xml", "")         							
+       						modules.add(foundModule)
+                    	}	
+                	}  
+            	}
+        	}
+			
+			def modules_dev   = modules.findAll{ it ==~ /.*_dev/ }
+			def modules_prod  = modules.findAll{ it ==~ /.*_prod/ }
+			
+			modules.removeAll(modules_dev);
+			modules.removeAll(modules_prod);
+			println "Modules found in this project: ";
+			println "Production:  " + modules_prod.join(',');
+			println "Development: " + modules_dev.join(',');
+			println "Other:       " + modules.join(',');			
+			
+			if ("${properties['production.build']}" != "null") {
+				println "Queuing production modules for GWT compilation"
+				properties["gwt.modules"] = modules_prod.join(',')			
+			} else if ("${properties['development.build']}" != "null") {
+				println "Queuing development modules for compilation"
+				properties["gwt.modules"] = modules_dev.join(',')
+			} else {					
+				println "Queuing other modules for compilation"
+				properties["gwt.modules"] = modules.join(',')
+			}
+        </groovy:groovy>
+	
+		<contrib:for list="${gwt.modules}" param="gwt.module">
+			<sequential>
+				<property name="gwt.containsEntryPoints" value="true"/>      
+				
+                <echo message="Compiling GWT module @{gwt.module}"/>
+				<java classname="com.google.gwt.dev.Compiler" fork="true" failonerror="true">
+					<jvmarg value="-Xms256m" />
+					<jvmarg value="-Xmx512m" />
+					<arg value="-war" />
+					<arg value="${build.gwt}" />
+					<arg value="-gen" />
+					<arg value="${build.gen}" />
+					<arg value="-extra" />
+					<arg value="${build.extra}" />					
+					<arg value="-logLevel" />
+					<arg value="${gwt.logLevel}" />
+					<arg value="-style" />
+					<arg value="${gwt.style}" />
+					<arg value="${gwt.additionalArgs}" />
+					<arg value="-localWorkers" />
+					<arg value="${gwt.localWorkers}" />
+					<arg value="@{gwt.module}" />
+					<classpath>
+						<pathelement path="${src}" />
+                        <pathelement path="${build.classes}" />
+						<path refid="default.classpath" /> 
+					</classpath>
+				</java>
+			</sequential>
+		</contrib:for>
+	</target>
+	
+
+	<!-- =========================================== -->
+	<!-- = Prepackage                              = -->
+	<!-- =========================================== -->
+	<target name="prepackage" />
+
+	
+	<!-- =========================================== -->
+	<!-- = Package                                 = -->
+	<!-- =========================================== -->
+	<target name="package" depends="package-gwt, package-war" description="Compiles and packages the project to gwt, war and ear"/>
+	
+	
+	<!-- =========================================== -->
+	<!-- = Package GWT                             = -->
+	<!-- =========================================== -->
+	<target name="package-gwt" depends="compile, prepackage">
+		<jar destfile="${build.artifacts}/${project.name}-gwt_src.jar" whenmanifestonly="skip">
+            <fileset dir="${src}">
+                <include name="**" />
+            </fileset>
+            <fileset dir="${build.classes}">
+                <include name="**" />
+            </fileset>			
+		</jar>
+		
+        <jar destfile="${build.artifacts}/${project.name}-gwt_api.jar" whenmanifestonly="skip">
+            <fileset dir="${build.classes.api}">
+                <exclude name="**/client/**/domain/**" />
+                <include name="**/client/remote/**" />
+                <include name="**/domain/**" />
+            </fileset>
+        </jar>
+	</target>
+	
+	
+	<!-- =========================================== -->
+	<!-- = Package WAR                             = -->
+	<!-- =========================================== -->
+	<target name="package-war" depends="compile, prepackage" if="gwt.containsEntryPoints">
+		<copy todir="${build.war}">
+			<fileset dir="${war}">
+				<exclude name="**/WEB-INF/classes/**"/>
+			</fileset>
+		</copy>
+
+		<copy todir="${build.war}">
+			<fileset dir="${build.gwt}" />
+		</copy>
+
+		<war destfile="${build.artifacts}/${project.name}.war" webxml="${build.war}/WEB-INF/web.xml" basedir="${build.war}" />
+	</target>
+
+
+	<!-- =========================================== -->
+	<!-- = Deploy                                  = -->
+	<!-- =========================================== -->
+	<target name="deploy" depends="package, package-war" description="Compiles and locally deploys the build results">
+        <fail message="Could not find folder specified in TOMCAT_HOME env variable, please set it to your local tomcat installation root">
+            <condition>
+                <not>
+                    <available file="${tomcat.webapps}" type="dir" /> 
+                </not>
+            </condition>
+       </fail>
+       <unzip src="${build.artifacts}/${project.name}.war" dest="${tomcat.webapps}/${project.name}"/>
+	</target>
+	
+	
+	<!-- =========================================== -->
+	<!-- = Init Remote Deployment                  = -->
+	<!-- =========================================== -->
+	<target name="init-deploy-remote">
+		<fail message="Could not find env.TOMCAT_REMOTE_HOST variable, please set it to the host you want to deploy to remotely">
+            <condition>
+				<not>
+					<isset property="env.TOMCAT_REMOTE_HOST"/>
+				</not>
+            </condition>
+		</fail>
+		
+		<fail message="Could not find ${user.home}/${env.TOMCAT_REMOTE_HOST}.properties. Please create it.">
+            <condition>
+				<not>
+                    <available file="${user.home}/${env.TOMCAT_REMOTE_HOST}.properties" type="file" /> 
+				</not>
+            </condition>
+		</fail>		
+		
+		<property file="${user.home}/${env.TOMCAT_REMOTE_HOST}.properties" />
+	</target>
+	
+	<!-- =========================================== -->
+	<!-- = Deploy Remotely                         = -->
+	<!-- =========================================== -->
+	<target name="deploy-remote" depends="deploy-remote-tomcat" description="Compiles and remotely deploys the build results" />				
+	
+	
+	<!-- =========================================== -->
+	<!-- = Deploy Remotely to Tomcat               = -->
+	<!-- =========================================== -->
+	<target name="deploy-remote-tomcat" depends="init-deploy-remote, package">
+		<property name="remote.application.path" value="${remote.application.home}/webapps/${project.name}" />
+				
+		<scp todir="${remote.user}@${env.TOMCAT_REMOTE_HOST}:${remote.application.path}" keyfile="${remote.keyfile}" trust="true" passphrase="${remote.passphrase}" verbose="true">
+			<fileset dir="${build.war}"/>
+		</scp>
+	</target>
+</project>
+ 
