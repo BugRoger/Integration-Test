@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<project name="build.gwt" default="compile" xmlns:ivy="antlib:org.apache.ivy.ant" 
-    xmlns:groovy="antlib:org.codehaus.groovy" xmlns:contrib="antlib:net.sf.antcontrib">
+<project name="build.gwt" default="compile" xmlns:groovy="antlib:org.codehaus.groovy" xmlns:contrib="antlib:net.sf.antcontrib">
 
 	<!-- =========================================== -->
 	<!-- = Properties                              = -->
@@ -151,11 +150,11 @@
 			if ("${properties['build.gwt.options.isheadless']}".contains("true")) {
 	            println "This is a headless GWT module. Won't invoke GWT compiler...";          		        	   
         	} else {
-            	new File("${properties['basedir']}\\src").eachDirRecurse() { dir ->  
+            	new File("${properties['basedir']}/src").eachDirRecurse() { dir ->  
                 	 dir.eachFileMatch(~/.*?.gwt.xml/) { file ->
                     	def module = new XmlSlurper().parse(file)
 						if (module."entry-point".@class != "") {
-			            	foundModule = file.path.replace("${properties['basedir']}\\src\\", "").replace("\\", ".").replace(".gwt.xml", "")         							
+			            	foundModule = file.path.replace("${properties['basedir']}/src/", "").replace("/", ".").replace(".gwt.xml", "")         							
        						modules.add(foundModule)
                     	}	
                 	}  
