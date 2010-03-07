@@ -29,6 +29,9 @@
 	<!-- = Prepare                                 = -->
 	<!-- =========================================== -->
 	<target name="prepare">
+		<mkdir dir="${src}" />
+	    <mkdir dir="${war}" />
+    
 		<mkdir dir="${build}" />
 	    <mkdir dir="${build.classes}" />
         <mkdir dir="${build.classes.api}" />
@@ -111,14 +114,14 @@
 	<!-- = Init for integration builds             = -->
 	<!-- =========================================== -->
 	<target name="init-remote" if="remote.build">
-        <echo message="Using remote ivy settings"/>
+        <echo message="Using remote settings"/>
 	</target>
 	
 	<!-- =========================================== -->
 	<!-- = Init for local builds                   = -->
 	<!-- =========================================== -->
 	<target name="init-local" if="local.build">
-        <echo message="Using local ivy settings"/>
+        <echo message="Using locale settings"/>
 	</target>
 	
 		
